@@ -17,6 +17,8 @@ import static com.github.tomakehurst.wiremock.matching.MatchResult.exactMatch;
 
 public class JwtMatcherExtension extends RequestMatcherExtension {
     public static final String NAME = "jwt-matcher";
+    public static final String PARAM_NAME_QUERY_PARAMETER= "query-parameter";
+    public static final String PARAM_NAME_HEADER_PARAMETER= "header-parameter";
     public static final String PARAM_NAME_PAYLOAD = "payload";
     public static final String PARAM_NAME_HEADER = "header";
     public static final String PARAM_NAME_REQUEST = "request";
@@ -32,6 +34,10 @@ public class JwtMatcherExtension extends RequestMatcherExtension {
             return noMatch();
         }
 
+        if (parameters.containsKey(PARAM_NAME_QUERY_PARAMETER) && parameters.containsKey(PARAM_NAME_HEADER_PARAMETER)) {
+            return noMatch();
+        }
+
         if (parameters.containsKey(PARAM_NAME_REQUEST)) {
             Parameters requestParameters = Parameters.of(parameters.get(PARAM_NAME_REQUEST));
             RequestPattern requestPattern = requestParameters.as(RequestPattern.class);
@@ -41,6 +47,13 @@ public class JwtMatcherExtension extends RequestMatcherExtension {
         }
 
         String authString = request.getHeader("Authorization");
+        if (parameters.containsKey(PARAM_NAME_QUERY_PARAMETER))
+        {
+            authString = request.queryParameter(parameters.getString(PARAM_NAME_QUERY_PARAMETER)).firstValue();
+        } else if (parameters.containsKey(PARAM_NAME_HEADER_PARAMETER)) { 
+            authString = request.getHeader(parameters.getString(PARAM_NAME_HEADER_PARAMETER));
+        }
+
         if (authString == null || authString.isEmpty()) {
             return noMatch();
         }

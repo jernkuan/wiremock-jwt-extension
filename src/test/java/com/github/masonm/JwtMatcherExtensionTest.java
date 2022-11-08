@@ -14,17 +14,25 @@ public class JwtMatcherExtensionTest {
         "{ \"test_header\": \"header_value\" }",
         "{ \"test_payload\": \"payload_value\" }"
     );
-    private static final Parameters PAYLOAD_PARAMETER = Parameters.one(
+    private static final Parameters JWT_PAYLOAD_PARAMETER = Parameters.one(
         JwtMatcherExtension.PARAM_NAME_PAYLOAD,
         ImmutableMap.of("test_payload", "payload_value")
     );
-    private static final Parameters HEADER_PARAMETER = Parameters.one(
+    private static final Parameters JWT_HEADER_PARAMETER = Parameters.one(
         JwtMatcherExtension.PARAM_NAME_HEADER,
         ImmutableMap.of("test_header", "header_value")
     );
+    private static final Parameters HEADER_PARAMETER = Parameters.one(
+        JwtMatcherExtension.PARAM_NAME_HEADER_PARAMETER,
+        "x-key"
+    );
+    private static final Parameters QUERY_PARAMETER = Parameters.one(
+        JwtMatcherExtension.PARAM_NAME_QUERY_PARAMETER,
+        "token"
+    );
     private static final Parameters BOTH_PARAMETERS = new Parameters() {{
-        putAll(PAYLOAD_PARAMETER);
-        putAll(HEADER_PARAMETER);
+        putAll(JWT_PAYLOAD_PARAMETER);
+        putAll(JWT_HEADER_PARAMETER);
     }};
 
     @Test
@@ -36,27 +44,38 @@ public class JwtMatcherExtensionTest {
     }
 
     @Test
+    public void noMatchWithBothHeaderAndQueryParameters() {
+        assertFalse(isExactMatch(mockRequest(), new Parameters() {
+            {
+                putAll(HEADER_PARAMETER);
+                putAll(QUERY_PARAMETER);
+
+            }
+        }));
+    }
+
+    @Test
     public void withValidParametersAndMatchingRequest() {
         final MockRequest request = mockRequest().header("Authorization", TEST_AUTH_HEADER.toString());
 
-        assertTrue(isExactMatch(request, PAYLOAD_PARAMETER));
-        assertTrue(isExactMatch(request, HEADER_PARAMETER));
+        assertTrue(isExactMatch(request, JWT_PAYLOAD_PARAMETER));
+        assertTrue(isExactMatch(request, JWT_HEADER_PARAMETER));
         assertTrue(isExactMatch(request, BOTH_PARAMETERS));
     }
 
     @Test
     public void withValidParametersAndRequestWithoutAuthorization() {
         final MockRequest request = mockRequest();
-        assertFalse(isExactMatch(request, PAYLOAD_PARAMETER));
-        assertFalse(isExactMatch(request, HEADER_PARAMETER));
+        assertFalse(isExactMatch(request, JWT_PAYLOAD_PARAMETER));
+        assertFalse(isExactMatch(request, JWT_HEADER_PARAMETER));
         assertFalse(isExactMatch(request, BOTH_PARAMETERS));
     }
 
     @Test
     public void withValidParametersAndRequestWithInvalidAuthorization() {
         final MockRequest request = mockRequest().header("Authorization", "Bearer f00");
-        assertFalse(isExactMatch(request, PAYLOAD_PARAMETER));
-        assertFalse(isExactMatch(request, HEADER_PARAMETER));
+        assertFalse(isExactMatch(request, JWT_PAYLOAD_PARAMETER));
+        assertFalse(isExactMatch(request, JWT_HEADER_PARAMETER));
         assertFalse(isExactMatch(request, BOTH_PARAMETERS));
     }
 
@@ -67,7 +86,7 @@ public class JwtMatcherExtensionTest {
                  "{}",
                  "{ \"test_payload\": \"payload_value\" }"
             ).toString());
-        assertFalse(isExactMatch(requestOnlyMatchingPayload, HEADER_PARAMETER));
+        assertFalse(isExactMatch(requestOnlyMatchingPayload, JWT_HEADER_PARAMETER));
         assertFalse(isExactMatch(requestOnlyMatchingPayload, BOTH_PARAMETERS));
 
         final MockRequest requestOnlyMatchingHeader = mockRequest()
@@ -75,13 +94,13 @@ public class JwtMatcherExtensionTest {
                 "{ \"test_header\": \"header_value\" }",
                 "{}"
             ).toString());
-        assertFalse(isExactMatch(requestOnlyMatchingHeader, PAYLOAD_PARAMETER));
+        assertFalse(isExactMatch(requestOnlyMatchingHeader, JWT_PAYLOAD_PARAMETER));
         assertFalse(isExactMatch(requestOnlyMatchingHeader, BOTH_PARAMETERS));
     }
 
     @Test
     public void withRequestParameter() {
-        final Parameters requestAndBodyParameters = Parameters.from(PAYLOAD_PARAMETER);
+        final Parameters requestAndBodyParameters = Parameters.from(JWT_PAYLOAD_PARAMETER);
         requestAndBodyParameters.put(
             "request",
             ImmutableMap.of("url", "/test_url")
@@ -114,6 +133,68 @@ public class JwtMatcherExtensionTest {
             JwtMatcherExtension.PARAM_NAME_PAYLOAD,
             ImmutableMap.of("aud", "foo")
         );
+        assertFalse(isExactMatch(request, noMatchPayloadParams));
+    }
+
+    @Test
+    public void withHeaderParameter() {
+        final TestAuthHeader authHeaderWithAud = new TestAuthHeader(
+            "{ \"test_header\": \"header_value\" }",
+            "{ \"aud\": [\"foo\", \"bar\"] }"
+        );
+        final MockRequest request = mockRequest().header("x-key", authHeaderWithAud.toString());
+
+        final Parameters matchPayloadParams = new Parameters() {
+            {
+                putAll(HEADER_PARAMETER);
+                putAll(Parameters.one(
+                        JwtMatcherExtension.PARAM_NAME_PAYLOAD,
+                        ImmutableMap.of("aud", new String[] { "foo", "bar" })));
+            }
+        };
+
+        assertTrue(isExactMatch(request, matchPayloadParams));
+
+        final Parameters noMatchPayloadParams = new Parameters() {
+            {
+                putAll(HEADER_PARAMETER);
+                putAll(Parameters.one(
+                        JwtMatcherExtension.PARAM_NAME_PAYLOAD,
+                        ImmutableMap.of("aud", "foo")));
+            }
+        };
+
+        assertFalse(isExactMatch(request, noMatchPayloadParams));
+    }
+
+    @Test
+    public void withQueryParameter() {
+        final TestAuthHeader authHeaderWithAud = new TestAuthHeader(
+            "{ \"test_header\": \"header_value\" }",
+            "{ \"aud\": [\"foo\", \"bar\"] }"
+        );
+        final MockRequest request = mockRequest().url("?token=" + authHeaderWithAud.toString());
+
+        final Parameters matchPayloadParams = new Parameters() {
+            {
+                putAll(QUERY_PARAMETER);
+                putAll(Parameters.one(
+                        JwtMatcherExtension.PARAM_NAME_PAYLOAD,
+                        ImmutableMap.of("aud", new String[] { "foo", "bar" })));
+            }
+        };
+
+        assertTrue(isExactMatch(request, matchPayloadParams));
+
+        final Parameters noMatchPayloadParams = new Parameters() {
+            {
+                putAll(QUERY_PARAMETER);
+                putAll(Parameters.one(
+                        JwtMatcherExtension.PARAM_NAME_PAYLOAD,
+                        ImmutableMap.of("aud", "foo")));
+            }
+        };
+
         assertFalse(isExactMatch(request, noMatchPayloadParams));
     }
 
